@@ -32,6 +32,7 @@ mongoose.connect(MONGODB_URI)
 // Automatic migration logic: Reads data.json and seeds MongoDB if empty
 async function runAutoMigration() {
   try {
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300');
     const portfolioCount = await Portfolio.countDocuments();
     if (portfolioCount > 0) {
       console.log('Database already initialized. Skipping auto-migration.');
@@ -115,12 +116,17 @@ function authenticateToken(req, res, next) {
 
 // --- PUBLIC ROUTES ---
 
+// Health check / ping endpoint
+app.get('/api/ping', (req, res) => {
+  res.json({ status: 'ok', timestamp: Date.now() });
+});
+
 // 1. Fetch entire public portfolio details
 app.get('/api/portfolio', async (req, res) => {
   try {
-    const portfolioDoc = await Portfolio.findOne() || { profile: {}, skills: [], experience: [], education: [], aiWorkflow: [] };
-    const projects = await Project.find().sort({ createdAt: 1 });
-    const references = await Reference.find().sort({ createdAt: 1 });
+    const portfolioDoc = await Portfolio.findOne().lean() || { profile: {}, skills: [], experience: [], education: [], aiWorkflow: [] };
+    const projects = await Project.find().sort({ createdAt: 1 }).lean();
+    const references = await Reference.find().sort({ createdAt: 1 }).lean();
 
     const publicData = {
       profile: portfolioDoc.profile || {},
