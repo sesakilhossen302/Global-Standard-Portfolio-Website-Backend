@@ -116,6 +116,35 @@ function authenticateToken(req, res, next) {
 
 // --- PUBLIC ROUTES ---
 
+// Server-Sent Events (SSE) for 0-second real-time sync
+const sseClients = new Set();
+
+app.get('/api/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (res.flushHeaders) res.flushHeaders();
+
+  sseClients.add(res);
+  res.write('data: ' + JSON.stringify({ type: 'connected', timestamp: Date.now() }) + '\n\n');
+
+  req.on('close', () => {
+    sseClients.delete(res);
+  });
+});
+
+function broadcastUpdate(type = 'portfolio_updated') {
+  const payload = 'data: ' + JSON.stringify({ type, timestamp: Date.now() }) + '\n\n';
+  for (const client of sseClients) {
+    try {
+      client.write(payload);
+    } catch (e) {
+      sseClients.delete(client);
+    }
+  }
+}
+
 // Health check / ping endpoint
 app.get('/api/ping', (req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() });
@@ -161,7 +190,7 @@ app.post('/api/contact', async (req, res) => {
     });
 
     await newMessage.save();
-    res.status(201).json({ success: true, message: 'Message sent successfully' });
+    broadcastUpdate(); res.status(201).json({ success: true, message: 'Message sent successfully' });
   } catch (error) {
     console.error('Error saving message:', error);
     res.status(500).json({ error: 'Failed to save message' });
@@ -209,7 +238,7 @@ app.put('/api/portfolio/profile', authenticateToken, async (req, res) => {
     portfolioDoc.profile = { ...portfolioDoc.profile, ...req.body };
     await portfolioDoc.save();
 
-    res.json({ success: true, message: 'Profile updated successfully', profile: portfolioDoc.profile });
+    broadcastUpdate(); res.json({ success: true, message: 'Profile updated successfully', profile: portfolioDoc.profile });
   } catch (error) {
     console.error('Error updating profile:', error);
     res.status(500).json({ error: 'Failed to update profile' });
@@ -232,7 +261,7 @@ app.post('/api/projects', authenticateToken, async (req, res) => {
     });
 
     await newProject.save();
-    res.status(201).json({ success: true, project: newProject });
+    broadcastUpdate(); res.status(201).json({ success: true, project: newProject });
   } catch (error) {
     console.error('Error adding project:', error);
     res.status(500).json({ error: 'Failed to add project' });
@@ -259,7 +288,7 @@ app.put('/api/projects/:id', authenticateToken, async (req, res) => {
     project.features = Array.isArray(req.body.features) ? req.body.features : project.features;
 
     await project.save();
-    res.json({ success: true, project });
+    broadcastUpdate(); res.json({ success: true, project });
   } catch (error) {
     console.error('Error updating project:', error);
     res.status(500).json({ error: 'Failed to update project' });
@@ -276,7 +305,7 @@ app.delete('/api/projects/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    res.json({ success: true, message: 'Project deleted successfully' });
+    broadcastUpdate(); res.json({ success: true, message: 'Project deleted successfully' });
   } catch (error) {
     console.error('Error deleting project:', error);
     res.status(500).json({ error: 'Failed to delete project' });
@@ -297,7 +326,7 @@ app.post('/api/references', authenticateToken, async (req, res) => {
     });
 
     await newRef.save();
-    res.status(201).json({ success: true, reference: newRef });
+    broadcastUpdate(); res.status(201).json({ success: true, reference: newRef });
   } catch (error) {
     console.error('Error adding reference:', error);
     res.status(500).json({ error: 'Failed to add reference' });
@@ -322,7 +351,7 @@ app.put('/api/references/:id', authenticateToken, async (req, res) => {
     ref.reviewImage = req.body.reviewImage !== undefined ? req.body.reviewImage : ref.reviewImage;
 
     await ref.save();
-    res.json({ success: true, reference: ref });
+    broadcastUpdate(); res.json({ success: true, reference: ref });
   } catch (error) {
     console.error('Error updating reference:', error);
     res.status(500).json({ error: 'Failed to update reference' });
@@ -339,7 +368,7 @@ app.delete('/api/references/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Reference not found' });
     }
 
-    res.json({ success: true, message: 'Reference deleted successfully' });
+    broadcastUpdate(); res.json({ success: true, message: 'Reference deleted successfully' });
   } catch (error) {
     console.error('Error deleting reference:', error);
     res.status(500).json({ error: 'Failed to delete reference' });
@@ -360,7 +389,7 @@ app.put('/api/skills', authenticateToken, async (req, res) => {
     portfolioDoc.skills = req.body.skills;
     await portfolioDoc.save();
 
-    res.json({ success: true, skills: portfolioDoc.skills });
+    broadcastUpdate(); res.json({ success: true, skills: portfolioDoc.skills });
   } catch (error) {
     console.error('Error updating skills:', error);
     res.status(500).json({ error: 'Failed to update skills' });
@@ -381,7 +410,7 @@ app.put('/api/experience', authenticateToken, async (req, res) => {
     portfolioDoc.experience = req.body.experience;
     await portfolioDoc.save();
 
-    res.json({ success: true, experience: portfolioDoc.experience });
+    broadcastUpdate(); res.json({ success: true, experience: portfolioDoc.experience });
   } catch (error) {
     console.error('Error updating experience:', error);
     res.status(500).json({ error: 'Failed to update experience' });
@@ -402,7 +431,7 @@ app.put('/api/education', authenticateToken, async (req, res) => {
     portfolioDoc.education = req.body.education;
     await portfolioDoc.save();
 
-    res.json({ success: true, education: portfolioDoc.education });
+    broadcastUpdate(); res.json({ success: true, education: portfolioDoc.education });
   } catch (error) {
     console.error('Error updating education:', error);
     res.status(500).json({ error: 'Failed to update education' });
@@ -423,7 +452,7 @@ app.put('/api/ai', authenticateToken, async (req, res) => {
     portfolioDoc.aiWorkflow = req.body.aiWorkflow;
     await portfolioDoc.save();
 
-    res.json({ success: true, aiWorkflow: portfolioDoc.aiWorkflow });
+    broadcastUpdate(); res.json({ success: true, aiWorkflow: portfolioDoc.aiWorkflow });
   } catch (error) {
     console.error('Error updating AI workflow:', error);
     res.status(500).json({ error: 'Failed to update AI workflow' });
@@ -451,7 +480,7 @@ app.delete('/api/contact/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Message not found' });
     }
 
-    res.json({ success: true, message: 'Message deleted successfully' });
+    broadcastUpdate(); res.json({ success: true, message: 'Message deleted successfully' });
   } catch (error) {
     console.error('Error deleting message:', error);
     res.status(500).json({ error: 'Failed to delete message' });
