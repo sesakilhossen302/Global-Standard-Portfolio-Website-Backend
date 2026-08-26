@@ -288,7 +288,8 @@ app.post('/api/auth/login', async (req, res) => {
 
 
 // Dedicated Video Upload Endpoint (handles both binary stream and JSON/base64 payload)
-app.post('/api/upload/video', authenticateToken, (req, res) => {
+
+const handleVideoUpload = (req, res) => {
   try {
     const contentType = req.headers['content-type'] || '';
     let ext = 'mp4';
@@ -311,7 +312,7 @@ app.post('/api/upload/video', authenticateToken, (req, res) => {
         buffer = Buffer.from(req.body, 'base64');
       }
     } else if (req.body && typeof req.body === 'object') {
-      const base64Str = req.body.videoData || req.body.video || req.body.base64;
+      const base64Str = req.body.videoData || req.body.video || req.body.base64 || req.body.heroVideoUrl;
       if (base64Str) {
         const parts = base64Str.split(';base64,');
         buffer = Buffer.from(parts[1] || parts[0], 'base64');
@@ -342,7 +343,13 @@ app.post('/api/upload/video', authenticateToken, (req, res) => {
     console.error('Upload video endpoint error:', e);
     res.status(500).json({ error: e.message });
   }
-});
+};
+
+app.post('/api/upload/video', authenticateToken, handleVideoUpload);
+app.post('/api/portfolio/upload-video', authenticateToken, handleVideoUpload);
+app.post('/api/upload/video', authenticateToken, handleVideoUpload);
+app.post('/api/portfolio/upload-video', authenticateToken, handleVideoUpload);
+app.post('/api/upload-video', authenticateToken, handleVideoUpload);
 
 // 4. Update Profile Info
 app.put('/api/portfolio/profile', authenticateToken, async (req, res) => {
