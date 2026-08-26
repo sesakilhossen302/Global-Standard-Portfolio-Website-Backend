@@ -286,22 +286,54 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 
-// Dedicated Binary/Base64 Video Upload Endpoint
+
+// Dedicated Video Upload Endpoint (handles both binary stream and JSON/base64 payload)
 app.post('/api/upload/video', authenticateToken, (req, res) => {
   try {
-    const ext = req.headers['content-type'] ? (req.headers['content-type'].split('/')[1] || 'mp4') : 'mp4';
+    const contentType = req.headers['content-type'] || '';
+    let ext = 'mp4';
+    if (contentType.includes('/')) {
+      ext = contentType.split('/')[1].split(';')[0].trim() || 'mp4';
+      if (ext === 'quicktime') ext = 'mov';
+    }
     const fileName = `hero_video_${Date.now()}.${ext}`;
     const filePath = path.join(__dirname, 'uploads', fileName);
-    
+
+    let buffer = null;
+
+    if (Buffer.isBuffer(req.body)) {
+      buffer = req.body;
+    } else if (typeof req.body === 'string') {
+      if (req.body.startsWith('data:video')) {
+        const parts = req.body.split(';base64,');
+        buffer = Buffer.from(parts[1] || parts[0], 'base64');
+      } else {
+        buffer = Buffer.from(req.body, 'base64');
+      }
+    } else if (req.body && typeof req.body === 'object') {
+      const base64Str = req.body.videoData || req.body.video || req.body.base64;
+      if (base64Str) {
+        const parts = base64Str.split(';base64,');
+        buffer = Buffer.from(parts[1] || parts[0], 'base64');
+      }
+    }
+
+    if (buffer && buffer.length > 0) {
+      fs.writeFileSync(filePath, buffer);
+      console.log('Saved video file from buffer:', fileName, buffer.length, 'bytes');
+      return res.status(200).json({ success: true, url: `/uploads/${fileName}` });
+    }
+
+    // Stream fallback
     const writeStream = fs.createWriteStream(filePath);
     req.pipe(writeStream);
-    
+
     writeStream.on('finish', () => {
       const stats = fs.statSync(filePath);
       console.log('Successfully saved streamed video:', fileName, stats.size, 'bytes');
       res.status(200).json({ success: true, url: `/uploads/${fileName}` });
     });
-    
+
     writeStream.on('error', (err) => {
       console.error('Error writing video stream to disk:', err);
       res.status(500).json({ error: 'Failed to write video file' });
@@ -312,30 +344,27 @@ app.post('/api/upload/video', authenticateToken, (req, res) => {
   }
 });
 
-// --- ADMIN PROTECTED ROUTES ---
-
 // 4. Update Profile Info
 app.put('/api/portfolio/profile', authenticateToken, async (req, res) => {
-    try {
-      if (req.body.heroVideoUrl && req.body.heroVideoUrl.startsWith('data:video')) {
-        try {
-          const parts = req.body.heroVideoUrl.split(';base64,');
-          if (parts.length === 2) {
-            const extMatch = parts[0].match(/video\/([a-zA-Z0-9]+)/);
-            const ext = extMatch ? extMatch[1] : 'mp4';
-            const fileName = `hero_video_${Date.now()}.${ext}`;
-            const filePath = path.join(__dirname, 'uploads', fileName);
-            const buffer = Buffer.from(parts[1], 'base64');
-            fs.writeFileSync(filePath, buffer);
-            req.body.heroVideoUrl = `/uploads/${fileName}`;
-            console.log('Saved video file to disk:', fileName, buffer.length, 'bytes');
-          }
-        } catch (vErr) {
-          console.error('Error saving uploaded video file:', vErr);
-        }
-      }
-
   try {
+    if (req.body.heroVideoUrl && req.body.heroVideoUrl.startsWith('data:video')) {
+      try {
+        const parts = req.body.heroVideoUrl.split(';base64,');
+        if (parts.length === 2) {
+          const extMatch = parts[0].match(/video\/([a-zA-Z0-9]+)/);
+          const ext = extMatch ? extMatch[1] : 'mp4';
+          const fileName = `hero_video_${Date.now()}.${ext}`;
+          const filePath = path.join(__dirname, 'uploads', fileName);
+          const buffer = Buffer.from(parts[1], 'base64');
+          fs.writeFileSync(filePath, buffer);
+          req.body.heroVideoUrl = `/uploads/${fileName}`;
+          console.log('Saved video file to disk:', fileName, buffer.length, 'bytes');
+        }
+      } catch (vErr) {
+        console.error('Error saving uploaded video file:', vErr);
+      }
+    }
+
     let portfolioDoc = await Portfolio.findOne();
     if (!portfolioDoc) {
       portfolioDoc = new Portfolio();
@@ -343,7 +372,8 @@ app.put('/api/portfolio/profile', authenticateToken, async (req, res) => {
     portfolioDoc.profile = { ...portfolioDoc.profile, ...req.body };
     await portfolioDoc.save();
 
-    broadcastUpdate(); res.json({ success: true, message: 'Profile updated successfully', profile: portfolioDoc.profile });
+    broadcastUpdate();
+    res.json({ success: true, message: 'Profile updated successfully', profile: portfolioDoc.profile });
   } catch (error) {
     console.error('Error updating profile:', error);
     res.status(500).json({ error: 'Failed to update profile' });
