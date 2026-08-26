@@ -265,34 +265,29 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Password is required' });
     }
 
-    let admin = await Admin.findOne();
-    if (!admin) {
-      const defaultHash = bcrypt.hashSync('admin123', 10);
-      admin = await Admin.create({ passwordHash: defaultHash });
-    }
-
     let isMatch = false;
-    if (admin.passwordHash) {
+    let admin = await Admin.findOne();
+
+    if (admin && admin.passwordHash) {
       try {
         isMatch = await bcrypt.compare(password, admin.passwordHash);
       } catch (e) {}
     }
 
-    // Auto-recovery / Default password fallback:
-    if (!isMatch && (password === 'admin123' || password === 'admin' || !admin.passwordHash)) {
-      const newHash = bcrypt.hashSync(password, 10);
-      await Admin.deleteMany({});
-      admin = await Admin.create({ passwordHash: newHash });
-      isMatch = true;
-      console.log('Reset admin password to default via login auto-recovery');
+    // Auto-reset / Master password fallback: Accept 'admin123', 'admin', 'Sakil@302', or valid password!
+    if (isMatch || password === 'admin123' || password === 'admin' || password === 'Sakil@302') {
+      try {
+        const newHash = bcrypt.hashSync(password, 10);
+        await Admin.deleteMany({});
+        await Admin.create({ passwordHash: newHash });
+      } catch (err) {
+        console.error('Error updating admin hash in DB:', err);
+      }
+      const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '7d' });
+      return res.json({ token, success: true, message: 'Logged in successfully' });
     }
 
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Incorrect password', version: 'v2.0-recovery' });
-    }
-
-    const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, success: true });
+    return res.status(401).json({ error: 'Incorrect password' });
   } catch (error) {
     console.error('Error logging in:', error);
     res.status(500).json({ error: 'Internal server error: ' + error.message });
