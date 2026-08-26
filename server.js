@@ -1,3 +1,4 @@
+console.log('--- BACKEND SERVER VERSION 2.0 READY ---');
 
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
