@@ -354,31 +354,34 @@ app.post('/api/upload-video', authenticateToken, handleVideoUpload);
 // 4. Update Profile Info
 app.put('/api/portfolio/profile', authenticateToken, async (req, res) => {
   try {
-    if (req.body.heroVideoUrl && (req.body.heroVideoUrl.includes(';base64,') || req.body.heroVideoUrl.length > 5000)) {
-      try {
-        let base64Str = req.body.heroVideoUrl;
-        let ext = 'mp4';
-        if (base64Str.includes(';base64,')) {
-          const parts = base64Str.split(';base64,');
-          const extMatch = parts[0].match(/video\/([a-zA-Z0-9]+)/);
-          if (extMatch && extMatch[1]) ext = extMatch[1];
-          if (ext === 'quicktime') ext = 'mov';
-          base64Str = parts[1];
+    // 1. Convert any uploaded base64 heroVideoUrl in req.body to disk file
+    if (req.body.heroVideoUrl && (req.body.heroVideoUrl.includes(';base64,') || req.body.heroVideoUrl.length > 2000)) {
+      if (!req.body.heroVideoUrl.startsWith('/uploads/') && !req.body.heroVideoUrl.startsWith('http')) {
+        try {
+          let base64Str = req.body.heroVideoUrl;
+          let ext = 'mp4';
+          if (base64Str.includes(';base64,')) {
+            const parts = base64Str.split(';base64,');
+            const extMatch = parts[0].match(/video\/([a-zA-Z0-9]+)/);
+            if (extMatch && extMatch[1]) ext = extMatch[1];
+            if (ext === 'quicktime') ext = 'mov';
+            base64Str = parts[1];
+          }
+          const fileName = `hero_video_${Date.now()}.${ext}`;
+          const filePath = path.join(__dirname, 'uploads', fileName);
+          const buffer = Buffer.from(base64Str, 'base64');
+          if (buffer.length > 0) {
+            fs.writeFileSync(filePath, buffer);
+            req.body.heroVideoUrl = `/uploads/${fileName}`;
+            console.log('Successfully saved req.body video file to disk:', fileName, buffer.length, 'bytes');
+          }
+        } catch (vErr) {
+          console.error('Error saving req.body video file:', vErr);
         }
-        const fileName = `hero_video_${Date.now()}.${ext}`;
-        const filePath = path.join(__dirname, 'uploads', fileName);
-        const buffer = Buffer.from(base64Str, 'base64');
-        if (buffer.length > 0) {
-          fs.writeFileSync(filePath, buffer);
-          req.body.heroVideoUrl = `/uploads/${fileName}`;
-          console.log('Saved large video file to disk:', fileName, buffer.length, 'bytes');
-        }
-      } catch (vErr) {
-        console.error('Error saving uploaded video file:', vErr);
       }
     }
 
-    // Also compress profile image if present
+    // 2. Compress profile image if present
     if (req.body.profileImage && req.body.profileImage.startsWith('data:image')) {
       req.body.profileImage = await compressBase64Image(req.body.profileImage, 800, 80);
     }
@@ -388,8 +391,31 @@ app.put('/api/portfolio/profile', authenticateToken, async (req, res) => {
       portfolioDoc = new Portfolio();
     }
 
-    // Merge profile object
-    const existingProfile = portfolioDoc.profile ? portfolioDoc.profile.toObject ? portfolioDoc.profile.toObject() : portfolioDoc.profile : {};
+    // 3. Clean up existing profile heroVideoUrl in MongoDB if it is a large base64 string
+    if (portfolioDoc.profile && portfolioDoc.profile.heroVideoUrl && portfolioDoc.profile.heroVideoUrl.length > 2000) {
+      if (!portfolioDoc.profile.heroVideoUrl.startsWith('/uploads/') && !portfolioDoc.profile.heroVideoUrl.startsWith('http')) {
+        try {
+          let base64Str = portfolioDoc.profile.heroVideoUrl;
+          if (base64Str.includes(';base64,')) {
+            base64Str = base64Str.split(';base64,')[1];
+          }
+          const fileName = `hero_video_${Date.now()}.mp4`;
+          const filePath = path.join(__dirname, 'uploads', fileName);
+          const buffer = Buffer.from(base64Str, 'base64');
+          if (buffer.length > 0) {
+            fs.writeFileSync(filePath, buffer);
+            portfolioDoc.profile.heroVideoUrl = `/uploads/${fileName}`;
+            console.log('Cleaned DB existing base64 video -> saved to file:', fileName);
+          }
+        } catch (cleanErr) {
+          console.error('Error cleaning existing DB video:', cleanErr);
+          portfolioDoc.profile.heroVideoUrl = '';
+        }
+      }
+    }
+
+    // 4. Merge updated fields safely
+    const existingProfile = portfolioDoc.profile ? (portfolioDoc.profile.toObject ? portfolioDoc.profile.toObject() : portfolioDoc.profile) : {};
     portfolioDoc.profile = { ...existingProfile, ...req.body };
     portfolioDoc.markModified('profile');
     await portfolioDoc.save();
@@ -397,10 +423,11 @@ app.put('/api/portfolio/profile', authenticateToken, async (req, res) => {
     await updateCache();
     broadcastUpdate();
 
+    console.log('Profile updated successfully! Hero Video URL:', portfolioDoc.profile.heroVideoUrl);
     res.json({ success: true, message: 'Profile updated successfully', profile: portfolioDoc.profile });
   } catch (error) {
-    console.error('Error updating profile:', error);
-    res.status(500).json({ error: 'Failed to update profile: ' + error.message });
+    console.error('FULL UPDATE ERROR:', error);
+    res.status(500).json({ error: error.message || String(error) });
   }
 });
 
