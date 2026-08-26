@@ -354,36 +354,53 @@ app.post('/api/upload-video', authenticateToken, handleVideoUpload);
 // 4. Update Profile Info
 app.put('/api/portfolio/profile', authenticateToken, async (req, res) => {
   try {
-    if (req.body.heroVideoUrl && req.body.heroVideoUrl.startsWith('data:video')) {
+    if (req.body.heroVideoUrl && (req.body.heroVideoUrl.includes(';base64,') || req.body.heroVideoUrl.length > 5000)) {
       try {
-        const parts = req.body.heroVideoUrl.split(';base64,');
-        if (parts.length === 2) {
+        let base64Str = req.body.heroVideoUrl;
+        let ext = 'mp4';
+        if (base64Str.includes(';base64,')) {
+          const parts = base64Str.split(';base64,');
           const extMatch = parts[0].match(/video\/([a-zA-Z0-9]+)/);
-          const ext = extMatch ? extMatch[1] : 'mp4';
-          const fileName = `hero_video_${Date.now()}.${ext}`;
-          const filePath = path.join(__dirname, 'uploads', fileName);
-          const buffer = Buffer.from(parts[1], 'base64');
+          if (extMatch && extMatch[1]) ext = extMatch[1];
+          if (ext === 'quicktime') ext = 'mov';
+          base64Str = parts[1];
+        }
+        const fileName = `hero_video_${Date.now()}.${ext}`;
+        const filePath = path.join(__dirname, 'uploads', fileName);
+        const buffer = Buffer.from(base64Str, 'base64');
+        if (buffer.length > 0) {
           fs.writeFileSync(filePath, buffer);
           req.body.heroVideoUrl = `/uploads/${fileName}`;
-          console.log('Saved video file to disk:', fileName, buffer.length, 'bytes');
+          console.log('Saved large video file to disk:', fileName, buffer.length, 'bytes');
         }
       } catch (vErr) {
         console.error('Error saving uploaded video file:', vErr);
       }
     }
 
+    // Also compress profile image if present
+    if (req.body.profileImage && req.body.profileImage.startsWith('data:image')) {
+      req.body.profileImage = await compressBase64Image(req.body.profileImage, 800, 80);
+    }
+
     let portfolioDoc = await Portfolio.findOne();
     if (!portfolioDoc) {
       portfolioDoc = new Portfolio();
     }
-    portfolioDoc.profile = { ...portfolioDoc.profile, ...req.body };
+
+    // Merge profile object
+    const existingProfile = portfolioDoc.profile ? portfolioDoc.profile.toObject ? portfolioDoc.profile.toObject() : portfolioDoc.profile : {};
+    portfolioDoc.profile = { ...existingProfile, ...req.body };
+    portfolioDoc.markModified('profile');
     await portfolioDoc.save();
 
+    await updateCache();
     broadcastUpdate();
+
     res.json({ success: true, message: 'Profile updated successfully', profile: portfolioDoc.profile });
   } catch (error) {
     console.error('Error updating profile:', error);
-    res.status(500).json({ error: 'Failed to update profile' });
+    res.status(500).json({ error: 'Failed to update profile: ' + error.message });
   }
 });
 
