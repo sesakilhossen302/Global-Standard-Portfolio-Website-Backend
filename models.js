@@ -18,7 +18,8 @@ const PortfolioSchema = new mongoose.Schema({
     email: { type: String, default: '' },
     location: { type: String, default: '' },
     githubUrl: { type: String, default: '' },
-    linkedinUrl: { type: String, default: '' }
+    linkedinUrl: { type: String, default: '' },
+    heroVideoUrl: { type: String, default: '' }
   },
   skills: { type: Array, default: [] },
   experience: { type: Array, default: [] },
