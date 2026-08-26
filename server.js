@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const compression = require('compression');
+const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
@@ -17,6 +18,32 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/portfo
 const DB_FILE = path.join(__dirname, 'data.json');
 
 let portfolioCache = null;
+
+// Auto-compress base64 images using Sharp C++ engine down to ultra-compact WebP (~30KB-80KB)
+async function compressBase64Image(base64Str, maxWidth = 1080, quality = 75) {
+  if (!base64Str || typeof base64Str !== 'string') return base64Str;
+  if (!base64Str.startsWith('data:image')) return base64Str;
+
+  try {
+    const parts = base64Str.split(';base64,');
+    if (parts.length !== 2) return base64Str;
+
+    const buffer = Buffer.from(parts[1], 'base64');
+    if (buffer.length < 80 * 1024) return base64Str; // Already under 80KB
+
+    const compressedBuffer = await sharp(buffer)
+      .resize({ width: maxWidth, height: maxWidth, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality })
+      .toBuffer();
+
+    console.log("Auto-Compressed Image from " + (buffer.length / 1024).toFixed(1) + " KB to " + (compressedBuffer.length / 1024).toFixed(1) + " KB");
+    return "data:image/webp;base64," + compressedBuffer.toString('base64');
+  } catch (err) {
+    console.error('Image compression error:', err.message);
+    return base64Str;
+  }
+}
+
 
 async function updateCache() {
   try {
@@ -306,6 +333,7 @@ app.put('/api/projects/:id', authenticateToken, async (req, res) => {
 
     project.title = req.body.title !== undefined ? req.body.title : project.title;
     project.description = req.body.description !== undefined ? req.body.description : project.description;
+    if (req.body.image) req.body.image = await compressBase64Image(req.body.image, 1080, 75);
     project.image = req.body.image !== undefined ? req.body.image : project.image;
     project.playStoreUrl = req.body.playStoreUrl !== undefined ? req.body.playStoreUrl : project.playStoreUrl;
     project.appStoreUrl = req.body.appStoreUrl !== undefined ? req.body.appStoreUrl : project.appStoreUrl;
