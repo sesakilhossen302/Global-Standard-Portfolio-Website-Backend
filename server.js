@@ -270,14 +270,20 @@ app.post('/api/auth/login', async (req, res) => {
       admin = await Admin.create({ passwordHash: defaultHash });
     }
 
-    let isMatch = await bcrypt.compare(password, admin.passwordHash);
+    let isMatch = false;
+    if (admin.passwordHash) {
+      try {
+        isMatch = await bcrypt.compare(password, admin.passwordHash);
+      } catch (e) {}
+    }
 
-    // Auto-recovery: Allow 'admin123' or 'admin' to reset hash automatically
-    if (!isMatch && (password === 'admin123' || password === 'admin')) {
-      admin.passwordHash = bcrypt.hashSync('admin123', 10);
-      await admin.save();
+    // Auto-recovery / Default password fallback:
+    if (!isMatch && (password === 'admin123' || password === 'admin' || !admin.passwordHash)) {
+      const newHash = bcrypt.hashSync(password, 10);
+      await Admin.deleteMany({});
+      admin = await Admin.create({ passwordHash: newHash });
       isMatch = true;
-      console.log('Reset admin password to default admin123 via login auto-recovery');
+      console.log('Reset admin password to default via login auto-recovery');
     }
 
     if (!isMatch) {
@@ -288,7 +294,7 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ token, success: true });
   } catch (error) {
     console.error('Error logging in:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error: ' + error.message });
   }
 });
 
