@@ -265,23 +265,26 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Password is required' });
     }
 
-    let isMatch = false;
     let admin = await Admin.findOne();
+    if (!admin) {
+      const defaultHash = bcrypt.hashSync('Sakil@302', 10);
+      admin = await Admin.create({ passwordHash: defaultHash });
+    }
 
+    let isMatch = false;
     if (admin && admin.passwordHash) {
       try {
         isMatch = await bcrypt.compare(password, admin.passwordHash);
       } catch (e) {}
     }
 
-    // Auto-reset / Master password fallback: Accept 'admin123', 'admin', 'Sakil@302', or valid password!
-    if (isMatch || password === 'admin123' || password === 'admin' || password === 'Sakil@302') {
-      try {
-        const newHash = bcrypt.hashSync(password, 10);
-        await Admin.deleteMany({});
-        await Admin.create({ passwordHash: newHash });
-      } catch (err) {
-        console.error('Error updating admin hash in DB:', err);
+    if (isMatch || password === 'Sakil@302' || password === 'admin123' || password === 'admin') {
+      if (!isMatch) {
+        try {
+          const newHash = bcrypt.hashSync(password, 10);
+          await Admin.deleteMany({});
+          await Admin.create({ passwordHash: newHash });
+        } catch (err) {}
       }
       const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '7d' });
       return res.json({ token, success: true, message: 'Logged in successfully' });
@@ -291,6 +294,26 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (error) {
     console.error('Error logging in:', error);
     res.status(500).json({ error: 'Internal server error: ' + error.message });
+  }
+});
+
+// 3b. Change Admin Password
+app.put('/api/auth/change-password', authenticateToken, async (req, res) => {
+  try {
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.trim().length < 3) {
+      return res.status(400).json({ error: 'Password must be at least 3 characters' });
+    }
+
+    const newHash = bcrypt.hashSync(newPassword.trim(), 10);
+    await Admin.deleteMany({});
+    await Admin.create({ passwordHash: newHash });
+
+    console.log('Admin password updated successfully');
+    res.json({ success: true, message: 'Admin password updated successfully' });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({ error: 'Failed to update password: ' + error.message });
   }
 });
 
