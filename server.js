@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+
 console.log('--- BACKEND SERVER VERSION 2.0 READY ---');
 
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -9,8 +12,6 @@ const express = require('express');
 const cors = require('cors');
 const compression = require('compression');
 const sharp = require('sharp');
-const fs = require('fs');
-const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
