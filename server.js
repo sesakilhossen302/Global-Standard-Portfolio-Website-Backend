@@ -287,7 +287,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (!isMatch) {
-      return res.status(401).json({ error: 'Incorrect password' });
+      return res.status(401).json({ error: 'Incorrect password', version: 'v2.0-recovery' });
     }
 
     const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '7d' });
