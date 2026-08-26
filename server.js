@@ -68,8 +68,8 @@ async function updateCache() {
 
 app.use(compression());
 app.use(cors());
-app.use(express.json({ limit: '50mb' })); // Support base64 image strings
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '100mb' })); // Support base64 image strings
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 // Connect to MongoDB
 mongoose.connect(MONGODB_URI)
