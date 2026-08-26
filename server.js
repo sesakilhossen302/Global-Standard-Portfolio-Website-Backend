@@ -1,23 +1,13 @@
-
 function cleanVideoUrlString(raw) {
   if (!raw || typeof raw !== 'string') return '';
   const validLinks = raw
     .split(/[\n,;]+/)
     .map(s => s.trim())
-    .filter(s => s.startsWith('http://') || s.startsWith('https://') || s.startsWith('/uploads/'))
-    .filter(s => !s.includes(';base64,') && s.length < 2000);
+    .filter(s => s.length > 3)
+    .filter(s => !s.includes(';base64,') && !s.startsWith('data:video') && !s.startsWith('AAAAGG') && s.length < 2000);
   return validLinks.join('\n');
 }
 
-const fs = require('fs');
-const path = require('path');
-
-console.log('--- BACKEND SERVER VERSION 2.0 READY ---');
-
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
