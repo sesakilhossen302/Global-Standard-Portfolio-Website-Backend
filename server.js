@@ -1,3 +1,8 @@
+
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -68,6 +73,7 @@ async function updateCache() {
 
 app.use(compression());
 app.use(cors());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.json({ limit: '100mb' })); // Support base64 image strings
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
@@ -283,6 +289,25 @@ app.post('/api/auth/login', async (req, res) => {
 
 // 4. Update Profile Info
 app.put('/api/portfolio/profile', authenticateToken, async (req, res) => {
+    try {
+      if (req.body.heroVideoUrl && req.body.heroVideoUrl.startsWith('data:video')) {
+        try {
+          const parts = req.body.heroVideoUrl.split(';base64,');
+          if (parts.length === 2) {
+            const extMatch = parts[0].match(/video\/([a-zA-Z0-9]+)/);
+            const ext = extMatch ? extMatch[1] : 'mp4';
+            const fileName = `hero_video_${Date.now()}.${ext}`;
+            const filePath = path.join(__dirname, 'uploads', fileName);
+            const buffer = Buffer.from(parts[1], 'base64');
+            fs.writeFileSync(filePath, buffer);
+            req.body.heroVideoUrl = `/uploads/${fileName}`;
+            console.log('Saved video file to disk:', fileName, buffer.length, 'bytes');
+          }
+        } catch (vErr) {
+          console.error('Error saving uploaded video file:', vErr);
+        }
+      }
+
   try {
     let portfolioDoc = await Portfolio.findOne();
     if (!portfolioDoc) {
