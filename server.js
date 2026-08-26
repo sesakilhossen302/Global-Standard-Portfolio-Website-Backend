@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
@@ -15,6 +16,30 @@ const JWT_SECRET = process.env.JWT_SECRET || 'sakil_portfolio_jwt_secret_key_123
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/portfolio';
 const DB_FILE = path.join(__dirname, 'data.json');
 
+let portfolioCache = null;
+
+async function updateCache() {
+  try {
+    const portfolioDoc = await Portfolio.findOne().lean() || { profile: {}, skills: [], experience: [], education: [], aiWorkflow: [] };
+    const projects = await Project.find().sort({ createdAt: 1 }).lean();
+    const references = await Reference.find().sort({ createdAt: 1 }).lean();
+
+    portfolioCache = {
+      profile: portfolioDoc.profile || {},
+      projects: projects || [],
+      skills: portfolioDoc.skills || [],
+      experience: portfolioDoc.experience || [],
+      education: portfolioDoc.education || [],
+      aiWorkflow: portfolioDoc.aiWorkflow || [],
+      references: references || []
+    };
+  } catch (err) {
+    console.error('Error updating in-memory cache:', err);
+  }
+}
+
+
+app.use(compression());
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); // Support base64 image strings
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -32,7 +57,7 @@ mongoose.connect(MONGODB_URI)
 // Automatic migration logic: Reads data.json and seeds MongoDB if empty
 async function runAutoMigration() {
   try {
-    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300');
+    
     const portfolioCount = await Portfolio.countDocuments();
     if (portfolioCount > 0) {
       console.log('Database already initialized. Skipping auto-migration.');
@@ -134,7 +159,8 @@ app.get('/api/events', (req, res) => {
   });
 });
 
-function broadcastUpdate(type = 'portfolio_updated') {
+async function broadcastUpdate(type = 'portfolio_updated') {
+  await updateCache();
   const payload = 'data: ' + JSON.stringify({ type, timestamp: Date.now() }) + '\n\n';
   for (const client of sseClients) {
     try {
@@ -212,7 +238,7 @@ app.post('/api/auth/login', async (req, res) => {
       admin = await Admin.create({ passwordHash: defaultHash });
     }
 
-    const isMatch = bcrypt.compareSync(password, admin.passwordHash);
+    const isMatch = await bcrypt.compare(password, admin.passwordHash);
     if (!isMatch) {
       return res.status(401).json({ error: 'Incorrect password' });
     }
