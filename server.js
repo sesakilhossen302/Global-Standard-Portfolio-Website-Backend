@@ -285,6 +285,33 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+
+// Dedicated Binary/Base64 Video Upload Endpoint
+app.post('/api/upload/video', authenticateToken, (req, res) => {
+  try {
+    const ext = req.headers['content-type'] ? (req.headers['content-type'].split('/')[1] || 'mp4') : 'mp4';
+    const fileName = `hero_video_${Date.now()}.${ext}`;
+    const filePath = path.join(__dirname, 'uploads', fileName);
+    
+    const writeStream = fs.createWriteStream(filePath);
+    req.pipe(writeStream);
+    
+    writeStream.on('finish', () => {
+      const stats = fs.statSync(filePath);
+      console.log('Successfully saved streamed video:', fileName, stats.size, 'bytes');
+      res.status(200).json({ success: true, url: `/uploads/${fileName}` });
+    });
+    
+    writeStream.on('error', (err) => {
+      console.error('Error writing video stream to disk:', err);
+      res.status(500).json({ error: 'Failed to write video file' });
+    });
+  } catch (e) {
+    console.error('Upload video endpoint error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- ADMIN PROTECTED ROUTES ---
 
 // 4. Update Profile Info
