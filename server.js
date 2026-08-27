@@ -211,13 +211,14 @@ async function broadcastUpdate(type = 'portfolio_updated') {
 
 // Health check / ping endpoint
 app.get('/api/ping', (req, res) => {
-  res.json({ status: 'ok', version: 'v2.5.1-video-proxy-top', timestamp: Date.now() });
+  res.json({ status: 'ok', version: 'v2.5.2-video-confirm', timestamp: Date.now() });
 });
+
 
 // High-performance CORS-enabled video proxy stream for Google Drive & remote videos
 app.get('/api/video-proxy/:fileId', (req, res) => {
   const fileId = req.params.fileId;
-  const driveUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+  const driveUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`;
 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -265,6 +266,7 @@ app.get('/api/video-proxy/:fileId', (req, res) => {
 
   fetchStream(driveUrl);
 });
+
 
 
 // 1. Fetch entire public portfolio details
