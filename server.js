@@ -211,8 +211,61 @@ async function broadcastUpdate(type = 'portfolio_updated') {
 
 // Health check / ping endpoint
 app.get('/api/ping', (req, res) => {
-  res.json({ status: 'ok', version: 'v2.5.0-video-proxy', timestamp: Date.now() });
+  res.json({ status: 'ok', version: 'v2.5.1-video-proxy-top', timestamp: Date.now() });
 });
+
+// High-performance CORS-enabled video proxy stream for Google Drive & remote videos
+app.get('/api/video-proxy/:fileId', (req, res) => {
+  const fileId = req.params.fileId;
+  const driveUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+
+  function fetchStream(targetUrl, redirects = 0) {
+    if (redirects > 8) {
+      return res.status(500).send('Too many redirects');
+    }
+
+    const client = targetUrl.startsWith('https') ? require('https') : require('http');
+    client.get(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+      }
+    }, (googleRes) => {
+      if (googleRes.statusCode >= 300 && googleRes.statusCode < 400 && googleRes.headers.location) {
+        return fetchStream(googleRes.headers.location, redirects + 1);
+      }
+
+      res.setHeader('Content-Type', googleRes.headers['content-type'] || 'video/mp4');
+      if (googleRes.headers['content-length']) {
+        res.setHeader('Content-Length', googleRes.headers['content-length']);
+      }
+      if (googleRes.headers['content-range']) {
+        res.setHeader('Content-Range', googleRes.headers['content-range']);
+        res.status(206);
+      } else {
+        res.status(googleRes.statusCode || 200);
+      }
+
+      googleRes.pipe(res);
+    }).on('error', (err) => {
+      console.error('Video proxy error:', err);
+      if (!res.headersSent) {
+        res.status(500).send('Error streaming video');
+      }
+    });
+  }
+
+  fetchStream(driveUrl);
+});
+
 
 // 1. Fetch entire public portfolio details
 app.get('/api/portfolio', async (req, res) => {
@@ -704,57 +757,7 @@ app.delete('/api/contact/:id', authenticateToken, async (req, res) => {
 
 // Start Express Server
 
-// High-performance CORS-enabled video proxy stream for Google Drive & remote videos
-app.get('/api/video-proxy/:fileId', (req, res) => {
-  const fileId = req.params.fileId;
-  const driveUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
 
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', '*');
-
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-
-  function fetchStream(targetUrl, redirects = 0) {
-    if (redirects > 8) {
-      return res.status(500).send('Too many redirects');
-    }
-
-    const client = targetUrl.startsWith('https') ? require('https') : require('http');
-    client.get(targetUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': '*/*',
-      }
-    }, (googleRes) => {
-      if (googleRes.statusCode >= 300 && googleRes.statusCode < 400 && googleRes.headers.location) {
-        return fetchStream(googleRes.headers.location, redirects + 1);
-      }
-
-      res.setHeader('Content-Type', googleRes.headers['content-type'] || 'video/mp4');
-      if (googleRes.headers['content-length']) {
-        res.setHeader('Content-Length', googleRes.headers['content-length']);
-      }
-      if (googleRes.headers['content-range']) {
-        res.setHeader('Content-Range', googleRes.headers['content-range']);
-        res.status(206);
-      } else {
-        res.status(googleRes.statusCode || 200);
-      }
-
-      googleRes.pipe(res);
-    }).on('error', (err) => {
-      console.error('Video proxy error:', err);
-      if (!res.headersSent) {
-        res.status(500).send('Error streaming video');
-      }
-    });
-  }
-
-  fetchStream(driveUrl);
-});
 
 
 app.listen(PORT, () => {
