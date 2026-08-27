@@ -211,7 +211,7 @@ async function broadcastUpdate(type = 'portfolio_updated') {
 
 // Health check / ping endpoint
 app.get('/api/ping', (req, res) => {
-  res.json({ status: 'ok', timestamp: Date.now() });
+  res.json({ status: 'ok', version: 'v2.5.0-video-proxy', timestamp: Date.now() });
 });
 
 // 1. Fetch entire public portfolio details
