@@ -522,6 +522,7 @@ app.post('/api/projects', authenticateToken, async (req, res) => {
       title: req.body.title || 'New Project',
       description: req.body.description || '',
       image: req.body.image || '',
+      videoUrl: req.body.videoUrl || req.body.video || '',
       playStoreUrl: req.body.playStoreUrl || '',
       appStoreUrl: req.body.appStoreUrl || '',
       githubUrl: req.body.githubUrl || '',
@@ -551,6 +552,7 @@ app.put('/api/projects/:id', authenticateToken, async (req, res) => {
     project.description = req.body.description !== undefined ? req.body.description : project.description;
     if (req.body.image) req.body.image = await compressBase64Image(req.body.image, 1080, 75);
     project.image = req.body.image !== undefined ? req.body.image : project.image;
+    project.videoUrl = req.body.videoUrl !== undefined ? req.body.videoUrl : (req.body.video !== undefined ? req.body.video : project.videoUrl);
     project.playStoreUrl = req.body.playStoreUrl !== undefined ? req.body.playStoreUrl : project.playStoreUrl;
     project.appStoreUrl = req.body.appStoreUrl !== undefined ? req.body.appStoreUrl : project.appStoreUrl;
     project.githubUrl = req.body.githubUrl !== undefined ? req.body.githubUrl : project.githubUrl;
