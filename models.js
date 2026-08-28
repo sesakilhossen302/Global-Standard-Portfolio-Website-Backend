@@ -33,6 +33,7 @@ const ProjectSchema = new mongoose.Schema({
   title: { type: String, default: 'New Project' },
   description: { type: String, default: '' },
   image: { type: String, default: '' },
+  videoUrl: { type: String, default: '' },
   playStoreUrl: { type: String, default: '' },
   appStoreUrl: { type: String, default: '' },
   githubUrl: { type: String, default: '' },

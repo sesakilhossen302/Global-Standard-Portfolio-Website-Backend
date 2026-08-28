@@ -542,25 +542,39 @@ app.post('/api/projects', authenticateToken, async (req, res) => {
 app.put('/api/projects/:id', authenticateToken, async (req, res) => {
   try {
     const projectId = req.params.id;
-    const project = await Project.findOne({ id: projectId });
+    let updateData = {};
+
+    if (req.body.title !== undefined) updateData.title = req.body.title;
+    if (req.body.description !== undefined) updateData.description = req.body.description;
+    if (req.body.image) {
+      updateData.image = await compressBase64Image(req.body.image, 1080, 75);
+    } else if (req.body.image !== undefined) {
+      updateData.image = req.body.image;
+    }
+    
+    const videoVal = req.body.videoUrl !== undefined ? req.body.videoUrl : req.body.video;
+    if (videoVal !== undefined) {
+      updateData.videoUrl = videoVal;
+    }
+    
+    if (req.body.playStoreUrl !== undefined) updateData.playStoreUrl = req.body.playStoreUrl;
+    if (req.body.appStoreUrl !== undefined) updateData.appStoreUrl = req.body.appStoreUrl;
+    if (req.body.githubUrl !== undefined) updateData.githubUrl = req.body.githubUrl;
+    if (Array.isArray(req.body.tags)) updateData.tags = req.body.tags;
+    if (Array.isArray(req.body.features)) updateData.features = req.body.features;
+
+    const project = await Project.findOneAndUpdate(
+      { id: projectId },
+      { $set: updateData },
+      { new: true }
+    );
     
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    project.title = req.body.title !== undefined ? req.body.title : project.title;
-    project.description = req.body.description !== undefined ? req.body.description : project.description;
-    if (req.body.image) req.body.image = await compressBase64Image(req.body.image, 1080, 75);
-    project.image = req.body.image !== undefined ? req.body.image : project.image;
-    project.videoUrl = req.body.videoUrl !== undefined ? req.body.videoUrl : (req.body.video !== undefined ? req.body.video : project.videoUrl);
-    project.playStoreUrl = req.body.playStoreUrl !== undefined ? req.body.playStoreUrl : project.playStoreUrl;
-    project.appStoreUrl = req.body.appStoreUrl !== undefined ? req.body.appStoreUrl : project.appStoreUrl;
-    project.githubUrl = req.body.githubUrl !== undefined ? req.body.githubUrl : project.githubUrl;
-    project.tags = Array.isArray(req.body.tags) ? req.body.tags : project.tags;
-    project.features = Array.isArray(req.body.features) ? req.body.features : project.features;
-
-    await project.save();
-    broadcastUpdate(); res.json({ success: true, project });
+    broadcastUpdate();
+    res.json({ success: true, project });
   } catch (error) {
     console.error('Error updating project:', error);
     res.status(500).json({ error: 'Failed to update project' });
