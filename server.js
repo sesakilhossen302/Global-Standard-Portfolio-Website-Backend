@@ -83,10 +83,31 @@ app.use(express.json({ limit: '100mb' })); // Support base64 image strings
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 // Connect to MongoDB
+async function compressExistingDatabaseImages() {
+  try {
+    const projects = await Project.find();
+    let updated = 0;
+    for (const proj of projects) {
+      if (proj.image && proj.image.startsWith('data:image') && proj.image.length > 100 * 1024) {
+        proj.image = await compressBase64Image(proj.image, 1080, 75);
+        await proj.save();
+        updated++;
+      }
+    }
+    if (updated > 0) {
+      console.log('Auto-compressed ' + updated + ' existing project images in MongoDB.');
+      broadcastUpdate();
+    }
+  } catch (err) {
+    console.error('Error compressing existing images:', err);
+  }
+}
+
 mongoose.connect(MONGODB_URI)
   .then(() => {
     console.log('Connected to MongoDB database');
     runAutoMigration();
+    compressExistingDatabaseImages();
   })
   .catch(err => {
     console.error('MongoDB connection error:', err);
