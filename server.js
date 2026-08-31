@@ -521,7 +521,7 @@ app.post('/api/projects', authenticateToken, async (req, res) => {
       id: 'proj-' + Date.now(),
       title: req.body.title || 'New Project',
       description: req.body.description || '',
-      image: req.body.image || '',
+      image: req.body.image ? await compressBase64Image(req.body.image, 1080, 75) : '',
       videoUrl: req.body.videoUrl || req.body.video || '',
       playStoreUrl: req.body.playStoreUrl || '',
       appStoreUrl: req.body.appStoreUrl || '',
